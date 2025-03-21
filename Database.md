@@ -1,9 +1,12 @@
-# Multi-Community Admission & Enrollment System
+# Multi-Community Admission & Enrollment System - Database Schema
 
-## Database Schema (MongoDB)
+## Overview
+This document outlines the advanced database schema for the Multi-Community Admission & Enrollment System. The system supports multiple communities, with a Super Admin managing communities, Community Directors overseeing individual communities, and Schools (Parents) enrolling students.
+
+## Database Collections
 
 ### 1. Users Collection (`users`)
-Stores information about all users, including Super Admins, School Admins, and Parents.
+Stores details of all users including Super Admins, Community Directors, and Schools (Parents).
 
 ```json
 {
@@ -11,7 +14,7 @@ Stores information about all users, including Super Admins, School Admins, and P
   "fullName": String,
   "email": String,
   "password": String (hashed),
-  "role": String ("super_admin" | "school_admin" | "parent"),
+  "role": String ("super_admin" | "community_director" | "school"),
   "contactNumber": String,
   "address": {
     "street": String,
@@ -19,20 +22,20 @@ Stores information about all users, including Super Admins, School Admins, and P
     "state": String,
     "zipCode": String
   },
-  "schoolId": ObjectId (nullable, only for school_admin or parent),
+  "communityId": ObjectId (nullable, assigned to Community Directors and Schools),
   "createdAt": Date,
   "updatedAt": Date
 }
 ```
 
 ### 2. Super Admin Collection (`super_admins`)
-Stores Super Admins who can sell and manage multiple schools.
+Stores information about Super Admins who manage and sell communities.
 
 ```json
 {
   "_id": ObjectId,
   "userId": ObjectId,  // Reference to `users` collection
-  "totalSchoolsManaged": Number,
+  "totalCommunitiesManaged": Number,
   "revenueGenerated": Number,
   "subscriptionPlans": [
     {
@@ -46,8 +49,8 @@ Stores Super Admins who can sell and manage multiple schools.
 }
 ```
 
-### 3. Schools Collection (`schools`)
-Stores details of schools using the system, including their branding (logo, theme, CMS settings).
+### 3. Communities Collection (`communities`)
+Stores community details and CMS settings.
 
 ```json
 {
@@ -61,8 +64,8 @@ Stores details of schools using the system, including their branding (logo, them
     "state": String,
     "zipCode": String
   },
-  "subscriptionPlan": ObjectId,  // Reference to `super_admins.subscriptionPlans`
   "superAdminId": ObjectId,  // Reference to `super_admins`
+  "communityDirectorId": ObjectId,  // Reference to `users` (role: community_director)
   "cmsSettings": {
     "logoUrl": String,
     "theme": {
@@ -78,56 +81,65 @@ Stores details of schools using the system, including their branding (logo, them
 }
 ```
 
-### 4. Parents Collection (`parents`)
-Stores parents and their associated students in an embedded structure.
+### 4. Schools Collection (`schools`)
+Stores details of Schools (Parents) registered under communities.
 
 ```json
 {
   "_id": ObjectId,
   "userId": ObjectId,  // Reference to `users` collection
-  "schoolId": ObjectId,  // The school the parent is registered under
-  "students": [
-    {
-      "studentId": ObjectId,
-      "fullName": String,
-      "dateOfBirth": Date,
-      "gradeLevel": String,
-      "gender": String,
-      "allergiesMedicalConditions": String,
-      "specialNeeds": Boolean,
-      "status": String ("pending" | "approved" | "rejected")
-    }
-  ],
+  "communityId": ObjectId,  // Reference to `communities`
+  "students": [ObjectId],  // References `students` collection
   "createdAt": Date,
   "updatedAt": Date
 }
 ```
 
-### 5. Courses Collection (`courses`)
-Stores course offerings per school.
+### 5. Students Collection (`students`)
+Stores student details associated with Schools.
 
 ```json
 {
   "_id": ObjectId,
   "schoolId": ObjectId,  // Reference to `schools`
+  "fullName": String,
+  "dateOfBirth": Date,
+  "gradeLevel": String,
+  "gender": String,
+  "allergiesMedicalConditions": String,
+  "specialNeeds": Boolean,
+  "status": String ("pending" | "approved" | "rejected"),
+  "createdAt": Date,
+  "updatedAt": Date
+}
+```
+
+### 6. Products Collection (`products`)
+Stores courses, materials, and services available for purchase.
+
+```json
+{
+  "_id": ObjectId,
+  "communityId": ObjectId,  // Reference to `communities`
   "name": String,
   "description": String,
-  "duration": Number (in months),
-  "fee": Number,
+  "price": Number,
+  "prerequisites": [ObjectId],  // References `products`
+  "visibility": String ("global" | "community-specific"),
   "createdAt": Date,
   "updatedAt": Date
 }
 ```
 
-### 6. Enrollments Collection (`enrollments`)
-Tracks student enrollments in courses.
+### 7. Enrollments Collection (`enrollments`)
+Tracks student enrollments in courses/products.
 
 ```json
 {
   "_id": ObjectId,
-  "studentId": ObjectId,  // Reference to `parents.students.studentId`
-  "courseId": ObjectId,  // Reference to `courses`
-  "schoolId": ObjectId,  // Reference to `schools`
+  "studentId": ObjectId,  // Reference to `students`
+  "productId": ObjectId,  // Reference to `products`
+  "communityId": ObjectId,  // Reference to `communities`
   "status": String ("active" | "cancelled" | "completed"),
   "startDate": Date,
   "endDate": Date,
@@ -136,18 +148,18 @@ Tracks student enrollments in courses.
 }
 ```
 
-### 7. Payments Collection (`payments`)
-Stores payment details for courses.
+### 8. Payments Collection (`payments`)
+Stores payment transactions.
 
 ```json
 {
   "_id": ObjectId,
   "transactionId": String,
-  "parentId": ObjectId,  // Reference to `parents`
-  "studentId": ObjectId,  // Reference to `parents.students.studentId`
-  "courseId": ObjectId,  // Reference to `courses`
+  "schoolId": ObjectId,  // Reference to `schools`
+  "studentId": ObjectId,  // Reference to `students`
+  "productId": ObjectId,  // Reference to `products`
   "amount": Number,
-  "paymentMethod": String ("credit_card" | "debit_card" | "paypal" | "ach_transfer"),
+  "paymentMethod": String ("credit_card" | "debit_card" | "plaid" | "helcim"),
   "paymentStatus": String ("pending" | "completed" | "failed"),
   "date": Date,
   "createdAt": Date,
@@ -155,30 +167,13 @@ Stores payment details for courses.
 }
 ```
 
-### 8. Subscriptions Collection (`subscriptions`)
-Tracks school subscription plans under the Super Admin.
+### 9. CMS Settings Collection (`cms_settings`)
+Stores community-specific CMS customization details.
 
 ```json
 {
   "_id": ObjectId,
-  "schoolId": ObjectId,  // Reference to `schools`
-  "planName": String,
-  "amount": Number,
-  "billingCycle": String ("monthly" | "quarterly" | "yearly"),
-  "status": String ("active" | "expired" | "cancelled"),
-  "nextBillingDate": Date,
-  "createdAt": Date,
-  "updatedAt": Date
-}
-```
-
-### 9. CMS Customization Collection (`cms_settings`)
-Allows each school to manage its own branding, theme, and content.
-
-```json
-{
-  "_id": ObjectId,
-  "schoolId": ObjectId,  // Reference to `schools`
+  "communityId": ObjectId,  // Reference to `communities`
   "logoUrl": String,
   "theme": {
     "primaryColor": String,
@@ -199,9 +194,22 @@ Allows each school to manage its own branding, theme, and content.
 }
 ```
 
-## Key Features in This Database Schema
-✅ Super Admin can sell, resell, and manage multiple schools.
-✅ Parents have embedded student details inside their collection.
-✅ Schools can customize their logo, theme, and website content (CMS settings).
-✅ Automated recurring payments via Stripe/PayPal.
-✅ Role-based access control for Super Admins, School Admins, and Parents.
+## Relationships
+- `users.role` determines access control.
+- `super_admins` manage `communities` and oversee `community_directors`.
+- `community_directors` manage `schools`, `products`, and `enrollments`.
+- `schools` (parents) register students and purchase products.
+- `students` are linked to `schools` and can be enrolled in `products`.
+- `payments` track transactions for `products`.
+- `cms_settings` allow each community to modify its website content.
+
+## Features Covered ✅
+✔️ Super Admin can sell, resell, and manage multiple communities.
+✔️ Community Directors manage CMS branding, courses, and enrollments.
+✔️ Schools (Parents) can apply for membership in multiple communities.
+✔️ Products include courses, materials, and services.
+✔️ Payments are handled through Helcim and Plaid (one-time payments only).
+✔️ CMS allows communities to customize themes, logos, and pages.
+✔️ Secure, role-based authentication (JWT, Google, Email Login Link).
+
+
